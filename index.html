@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CyberGuard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="side" id="side">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.5 5 13 12 15 7-2 12-7.5 12-15V7z" fill="#8B5CF6"/><path d="m11 16 4 4 7-8" fill="none" stroke="#0B0715" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    CyberGuard
+  </div>
+  <nav aria-label="Tools">
+    <button data-view="overview">Overview</button>
+    <button data-view="identifier" data-desc="Count digits, letters and symbols in text.">Identifier Analyzer</button>
+    <button data-view="score" data-desc="Sum, average, minimum and maximum of your scores.">Score Calculator</button>
+    <button data-view="pointers" data-desc="See how C++ pointers add and compare two numbers.">Pointer Operations</button>
+    <button data-view="assessment" data-desc="Compare one user's five scores to a baseline.">User Assessment</button>
+    <button data-view="file" data-desc="Get a file's SHA-256 hash and compare it.">File Integrity Lab</button>
+    <button data-view="password" data-desc="Rate a sample password and get tips.">Password Strength Analyzer</button>
+    <button data-view="log" data-desc="Summarize warnings, errors and failed logins.">Security Log Analyzer</button>
+    <button data-view="ip" data-desc="Check an IPv4 or IPv6 address.">IP Address Validator</button>
+    <button data-view="report" data-desc="Create a TXT or CSV report of an analysis.">Security Reports</button>
+    <button data-view="history">Activity History</button>
+    <button data-view="about">About CyberGuard</button>
+  </nav>
+</aside>
+
+<div class="main">
+<header class="top">
+  <button id="menu" aria-label="Open menu" aria-expanded="false">Menu</button>
+  <h1 id="title">Overview</h1>
+  <span id="pill" class="pill" role="status">Checking server</span>
+</header>
+<main>
+
+<section class="view" id="v-overview">
+  <p class="lead">Nine small tools for learning how basic security checks work. Pick one to start.</p>
+  <div class="stats">
+    <div class="card"><b data-stat="analyses">-</b><span>Analyses run</span></div>
+    <div class="card"><b data-stat="files">-</b><span>Files verified</span></div>
+    <div class="card"><b data-stat="assessments">-</b><span>Assessments</span></div>
+    <div class="card"><b data-stat="reports">-</b><span>Reports generated</span></div>
+  </div>
+  <p class="note" id="dashNote"></p>
+  <h2>Tools</h2>
+  <div class="grid" id="cards"></div>
+  <h2>Recent activity</h2>
+  <div class="result" id="recent"><p class="empty">No activity yet. Run a tool and it will appear here.</p></div>
+</section>
+
+<section class="view" id="v-identifier" hidden>
+  <p class="lead">Counts digits, letters and other characters in any text, and shows which digit appears most.</p>
+  <form class="tool" data-tool="identifier">
+    <label>Text to analyze
+      <textarea name="text" id="idText" rows="3" maxlength="1000" placeholder="e.g. AB12 3C 4@4 99" required></textarea>
+      <small id="count">0 characters</small>
+    </label>
+    <button class="go">Analyze text</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-score" hidden>
+  <p class="lead">Enter 1 to 10 whole numbers to get the count, sum, minimum, maximum and average.</p>
+  <form class="tool" data-tool="score">
+    <label>Scores, separated by commas
+      <input name="scores" placeholder="e.g. 72, 85, 90" required>
+    </label>
+    <button class="go">Calculate</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-pointers" hidden>
+  <p class="lead">Two numbers are passed to C++ by address. The result shows their sum and absolute difference.</p>
+  <form class="tool" data-tool="pointers">
+    <label>First number <input type="number" name="a" step="1" required></label>
+    <label>Second number <input type="number" name="b" step="1" required></label>
+    <button class="go">Run pointer operations</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-assessment" hidden>
+  <p class="lead">Enter a user's five scores and a baseline. The result shows the total, average and pass or fail.</p>
+  <form class="tool" data-tool="assessment">
+    <label>User name <input name="user" maxlength="40" required></label>
+    <label>Five scores from 0 to 100, separated by commas <input name="scores" placeholder="e.g. 60, 70, 80, 90, 75" required></label>
+    <label>Baseline average (0 to 100) <input type="number" name="baseline" value="50" step="1" required></label>
+    <button class="go">Assess user</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-file" hidden>
+  <p class="lead">Calculates the SHA-256 hash of a file on your computer. Files up to 25 MB are accepted. A matching hash shows the file is identical to the reference. It does not prove who made it.</p>
+  <form class="tool" data-tool="file">
+    <label>File <input type="file" name="file" required></label>
+    <label>Reference SHA-256 (optional) <input name="reference" maxlength="64" class="mono" placeholder="64 hexadecimal characters"></label>
+    <button class="go">Calculate and compare</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-password" hidden>
+  <p class="lead">Rates a sample password by length and variety. The password is not saved or logged. Use a made-up sample, not a real one.</p>
+  <form class="tool" data-tool="password" autocomplete="off">
+    <label>Sample password <input type="password" name="password" autocomplete="off" maxlength="128" required></label>
+    <button class="go">Check strength</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-log" hidden>
+  <p class="lead">Upload a .log or .txt file (up to 5 MB) to count INFO, WARNING and ERROR lines, failed logins and common IP addresses.</p>
+  <form class="tool" data-tool="log">
+    <label>Log file <input type="file" name="file" accept=".log,.txt" required></label>
+    <button class="go">Analyze log</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-ip" hidden>
+  <p class="lead">Checks whether text is a valid IPv4 or IPv6 address and shows its properties.</p>
+  <form class="tool" data-tool="ip">
+    <label>IP address <input name="address" maxlength="45" placeholder="e.g. 192.168.1.10" required></label>
+    <button class="go">Validate address</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Results appear here.</p></div>
+</section>
+
+<section class="view" id="v-report" hidden>
+  <p class="lead">Creates a report for one kind of analysis. Reports never include passwords or uploaded file contents.</p>
+  <form class="tool" data-tool="report">
+    <label>Analysis type
+      <select name="kind">
+        <option>Identifier</option><option>Score</option><option>Pointer</option><option>Assessment</option>
+        <option>File integrity</option><option>Password</option><option>Log</option><option>IP address</option>
+      </select>
+    </label>
+    <label>Format <select name="format"><option>TXT</option><option>CSV</option></select></label>
+    <button class="go">Generate report</button>
+  </form>
+  <div class="result" aria-live="polite"><p class="empty">Reports appear here.</p></div>
+</section>
+
+<section class="view" id="v-history" hidden>
+  <p class="lead">Everything you have analyzed, newest first.</p>
+  <p><button class="go" id="refresh">Refresh</button></p>
+  <div class="result" id="hist"><p class="empty">No activity yet. Run a tool and it will appear here.</p></div>
+</section>
+
+<section class="view" id="v-about" hidden>
+  <p class="lead">CyberGuard is a learning project that joins C++, Python, Oracle and web pages in one application.</p>
+  <div class="card prose">
+    <p>It is an educational toolkit. It is not a penetration-testing tool, a malware scanner or a certified security product, and a green result here does not mean a system is safe.</p>
+    <p>The page you see is HTML, CSS and JavaScript. A C++ server does the main calculations, Python handles passwords, logs and IP addresses, and Oracle stores the history.</p>
+  </div>
+</section>
+
+</main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="script.js"></script>
+</body>
+</html>
