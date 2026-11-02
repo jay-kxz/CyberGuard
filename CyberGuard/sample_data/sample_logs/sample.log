@@ -1,0 +1,23 @@
+2026-10-30 09:01:12 INFO  Server started on port 8080
+2026-10-30 09:02:45 INFO  User alice logged in from 192.168.1.10
+2026-10-30 09:05:10 WARNING Disk usage at 82 percent
+2026-10-30 09:15:33 ERROR Failed login for user admin from 203.0.113.45
+2026-10-30 09:15:41 ERROR Failed login for user admin from 203.0.113.45
+2026-10-30 09:15:49 ERROR Failed login for user root from 203.0.113.45
+2026-10-30 09:16:02 WARNING Multiple failed password attempts from 203.0.113.45
+2026-10-30 09:30:00 INFO  Scheduled backup completed
+2026-10-30 10:02:11 INFO  User bob logged in from 192.168.1.22
+2026-10-30 10:05:27 INFO  File report.pdf downloaded by bob from 192.168.1.22
+2026-10-30 10:20:54 WARNING Slow response from database (2300 ms)
+2026-10-30 10:41:09 ERROR Failed login for user guest from 198.51.100.7
+2026-10-30 10:41:20 ERROR Authentication failure for user guest from 198.51.100.7
+2026-10-30 11:00:00 INFO  Health check OK
+2026-10-30 11:12:36 INFO  User alice logged out
+2026-10-30 11:30:05 ERROR Unable to open file config.tmp
+2026-10-30 11:45:50 WARNING Memory usage at 76 percent
+2026-10-30 12:00:00 INFO  Health check OK
+2026-10-30 12:10:14 INFO  User carol logged in from 192.168.1.35
+2026-10-30 12:33:21 ERROR Failed login for user carol from 192.168.1.35
+2026-10-30 12:33:30 INFO  User carol logged in from 192.168.1.35
+
+this line has no level or time

@@ -1,0 +1,5 @@
+# Phase 5 needs NO extra packages (standard library only).
+# These are used later, in Phase 6 and Phase 8:
+flask
+python-oracledb
+python-dotenv
