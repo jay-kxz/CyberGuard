@@ -102,6 +102,7 @@ function tableFrom(o) {
     if (v && typeof v === "object" && !Array.isArray(v)) c.append(tableFrom(v));
     else if (Array.isArray(v) && v.length && v[0] && typeof v[0] === "object") c.append(listTable(v));
     else if (Array.isArray(v) && !v.length) c.textContent = "none";
+    else if (v === null || v === undefined) c.textContent = "none";
     else c.textContent = Array.isArray(v) ? v.join(", ") : String(v);
   }
   return t;
@@ -131,7 +132,7 @@ $$("form.tool").forEach(f => f.addEventListener("submit", async e => {
       c.onclick = () => navigator.clipboard.writeText(hash).then(() => toast("Hash copied."), () => toast("Copy failed."));
       out.append(c);
     }
-    toast(j.persisted === false ? "Done, but the database is offline so it was not saved." : "Done.");
+    toast(j.data.persisted === false ? "Done, but the database is offline so it was not saved." : "Done.");
   } catch (err) {
     out.className = "result err"; out.textContent = err.message;
   } finally { btn.disabled = false; btn.textContent = label; }
@@ -166,8 +167,12 @@ async function loadDash() {
 
 async function health() {
   const p = $("#pill");
-  try { await api("/api/health"); p.textContent = "Server online"; p.className = "pill up"; }
-  catch { p.textContent = "Server offline"; p.className = "pill down"; }
+  try {
+    const d = (await api("/api/health")).data;
+    if (!d.python) { p.textContent = "Python service offline"; p.className = "pill down"; return; }
+    if (!d.database) { p.textContent = "Database offline"; p.className = "pill down"; return; }
+    p.textContent = "All services online"; p.className = "pill up";
+  } catch { p.textContent = "Server offline"; p.className = "pill down"; }
 }
 
 // Start-up: wire events, build the tool cards, load live data.

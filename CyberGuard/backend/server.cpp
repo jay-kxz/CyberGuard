@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -15,6 +16,7 @@
 
 #include "httplib.h"
 #include "json.hpp"
+#include "modules/file_integrity.h"
 #include "modules/identifier_analyzer.h"
 #include "modules/pointer_operations.h"
 #include "modules/score_calculator.h"
@@ -26,6 +28,7 @@ namespace {
 
 constexpr std::size_t kMaxJsonBody = 100 * 1024;          // JSON requests: 100 KB
 constexpr std::size_t kMaxUpload = 26 * 1024 * 1024;      // room for the 25 MB file limit (Phase 3B)
+constexpr std::size_t kMaxFileBytes = 25 * 1024 * 1024;   // Module 5: the documented file limit
 
 AssessmentBoard g_board;       // assessments kept in memory while the server runs
 std::mutex g_boardMutex;       // the server handles requests on several threads
@@ -41,18 +44,31 @@ std::mutex g_lastMutex;
 double round2(double v) { return std::round(v * 100.0) / 100.0; }
 
 // ---- Response helpers: every reply is {"ok":true,"data":...} or {"ok":false,"error":"..."} ----
+// dump(..., replace) swaps invalid UTF-8 for a placeholder instead of throwing,
+// so a file name or log line pasted from another encoding can never break a reply.
+std::string dump(const json& value) {
+    return value.dump(-1, ' ', false, json::error_handler_t::replace);
+}
 void sendOk(httplib::Response& res, const json& data) {
     res.status = 200;
-    res.set_content(json{{"ok", true}, {"data", data}}.dump(), "application/json");
+    res.set_content(dump(json{{"ok", true}, {"data", data}}), "application/json");
 }
 void sendError(httplib::Response& res, int status, const std::string& message) {
     res.status = status;
-    res.set_content(json{{"ok", false}, {"error", message}}.dump(), "application/json");
+    res.set_content(dump(json{{"ok", false}, {"error", message}}), "application/json");
 }
 
 std::string lowerCase(std::string s) {
     for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return s;
+}
+
+// Removes leading and trailing spaces/tabs/newlines.
+std::string trimmed(const std::string& text) {
+    std::size_t first = 0, last = text.size();
+    while (first < last && std::isspace(static_cast<unsigned char>(text[first]))) ++first;
+    while (last > first && std::isspace(static_cast<unsigned char>(text[last - 1]))) --last;
+    return text.substr(first, last - first);
 }
 
 void rememberResult(const std::string& type, const json& inputSummary, const json& results) {
@@ -155,15 +171,124 @@ json handleAssessment(const json& b) {
     return data;
 }
 
-// Reads the JSON body, runs the handler, and turns exceptions into clean error replies.
-template <typename Handler>
-void serveJson(const httplib::Request& req, httplib::Response& res, Handler handler) {
+// ---- Module 5: file integrity ----
+// Declared here because the reply is reported to Python further down the file.
+bool postToPython(const std::string& path, const json& payload, json& reply);
+
+// Hash an uploaded file in C++ and compare it with an optional reference hash.
+// The check is then offered to the Python service, which calls
+// insert_file_integrity_record() so the result is stored in Oracle.
+json handleFileHash(const httplib::Request& req) {
+    if (!req.has_file("file")) throw std::invalid_argument("Choose a file first.");
+    const httplib::MultipartFormData& upload = req.get_file_value("file");
+    if (upload.content.size() > kMaxFileBytes)
+        throw std::invalid_argument("That file is larger than 25 MB.");
+
+    std::string reference;
+    if (req.has_file("reference"))
+        reference = lowerCase(trimmed(req.get_file_value("reference").content));
+
+    const std::string digest = sha256Hex(upload.content);
+    const std::string verification = verifyHash(digest, reference);   // throws on a bad reference
+
+    json data = {{"filename", upload.filename},
+                 {"size", static_cast<unsigned long long>(upload.content.size())},
+                 {"sha256", digest},
+                 {"reference", reference.empty() ? json(nullptr) : json(reference)},
+                 {"verification", verification}};
+
+    json stored;
+    if (postToPython("/api/file-check",
+                     {{"filename", upload.filename}, {"size", data["size"]},
+                      {"sha256", digest}, {"reference", data["reference"]}},
+                     stored)) {
+        if (stored.value("persisted", false)) data["persisted"] = true;
+    }
+    return data;
+}
+// ---- Recording and relaying ----
+// The C++ modules finish their work first. Only then is the result handed to the
+// Python service, which is the single part of CyberGuard that talks to Oracle.
+// If that service (or the database) is unavailable the analysis is still a
+// success: the reply simply carries "persisted": false and the page says so.
+bool postToPython(const std::string& path, const json& payload, json& reply) {
+    httplib::Client client(kPythonHost, kPythonPort);
+    client.set_connection_timeout(2);
+    client.set_read_timeout(5);
+    auto answer = client.Post(path, dump(payload), "application/json");
+    if (!answer || answer->status != 200) return false;
+    json parsed = json::parse(answer->body, nullptr, false);
+    if (!parsed.is_object() || !parsed.value("ok", false) || !parsed.contains("data")) return false;
+    reply = parsed["data"];
+    return true;
+}
+
+bool getFromPython(const std::string& target, json& reply) {
+    httplib::Client client(kPythonHost, kPythonPort);
+    client.set_connection_timeout(2);
+    client.set_read_timeout(15);
+    auto answer = client.Get(target);
+    if (!answer || answer->status != 200) return false;
+    json parsed = json::parse(answer->body, nullptr, false);
+    if (!parsed.is_object() || !parsed.value("ok", false) || !parsed.contains("data")) return false;
+    reply = parsed["data"];
+    return true;
+}
+
+// Relays a GET to Python and passes the reply through untouched, so the Python
+// error message ("the database is not connected yet") reaches the page as-is.
+void relayGet(const std::string& target, httplib::Response& res) {
+    httplib::Client client(kPythonHost, kPythonPort);
+    client.set_connection_timeout(2);
+    client.set_read_timeout(15);
+    auto answer = client.Get(target);
+    if (!answer) return sendError(res, 503, "The Python service is not running. Start it with run_all.bat.");
+    res.status = answer->status;
+    res.set_content(answer->body, "application/json");
+}
+
+// One line for analysis_history.result_summary (VARCHAR2(500) in the schema).
+std::string dbSummary(const std::string& module, const json& d) {
+    std::ostringstream out;
+    if (module == "Identifier")
+        out << d.value("total_digits", 0) << " digits, " << d.value("total_letters", 0)
+            << " letters, " << d.value("total_other_characters", 0) << " other";
+    else if (module == "Score")
+        out << "count " << d.value("count", 0) << ", sum " << d.value("sum", 0)
+            << ", average " << d.value("average", 0.0);
+    else if (module == "Pointer")
+        out << "sum " << d.value("sum", 0) << ", absolute difference " << d.value("absolute_difference", 0);
+    else if (module == "Assessment")
+        out << d.value("user", std::string("?")) << ": total " << d.value("total", 0)
+            << ", average " << d.value("average", 0.0) << ", " << d.value("result", std::string(""));
+    else if (module == "File integrity")
+        out << d.value("verification", std::string("NO REFERENCE GIVEN")) << ", "
+            << d.value("filename", std::string("(file)")) << " (" << d.value("size", 0) << " bytes)";
+    return out.str();
+}
+
+bool recordResult(const std::string& module, const json& data) {
+    json reply;
+    if (!postToPython("/api/record", {{"module", module}, {"summary", dbSummary(module, data)}}, reply))
+        return false;
+    return reply.value("persisted", false);
+}
+
+// Reads the JSON body, runs the handler, saves the result when it can, and turns
+// exceptions into clean error replies.
+template <typename Handler, typename After>
+void serveJson(const httplib::Request& req, httplib::Response& res, const std::string& module,
+               Handler handler, After after) {
     if (req.body.size() > kMaxJsonBody) return sendError(res, 413, "The request is too large.");
     json body = json::parse(req.body, nullptr, false);       // false = do not throw on bad JSON
     if (body.is_discarded() || !body.is_object())
         return sendError(res, 400, "The request body must be a JSON object.");
     try {
-        sendOk(res, handler(body));
+        json data = handler(body);
+        after(data);                                        // extra saving specific to one module
+        const bool recorded = recordResult(module, data);
+        data["persisted"] = recorded || data.value("persisted", false);
+        sendOk(res, data);
     } catch (const std::invalid_argument& e) {
         sendError(res, 400, e.what());
     } catch (const std::overflow_error& e) {
@@ -171,6 +296,12 @@ void serveJson(const httplib::Request& req, httplib::Response& res, Handler hand
     } catch (const std::exception&) {
         sendError(res, 500, "Internal server error.");
     }
+}
+
+template <typename Handler>
+void serveJson(const httplib::Request& req, httplib::Response& res, const std::string& module,
+               Handler handler) {
+    serveJson(req, res, module, handler, [](json&) {});
 }
 
 // ---- Python gateway ----
@@ -242,12 +373,6 @@ void handleReport(const httplib::Request& req, httplib::Response& res) {
     }
 }
 
-httplib::Server::Handler notReady(const std::string& what) {
-    return [what](const httplib::Request&, httplib::Response& res) {
-        sendError(res, 501, what + " is not available yet.");
-    };
-}
-
 }  // namespace
 
 int runServer(const std::string& frontendDir, int port) {
@@ -261,12 +386,47 @@ int runServer(const std::string& frontendDir, int port) {
     }
 
     svr.Get("/api/health", [](const httplib::Request&, httplib::Response& res) {
-        sendOk(res, {{"status", "up"}});
+        json data = {{"status", "up"}, {"python", false}, {"database", false},
+                     {"detail", "The Python service is not running, so the tools that use it are unavailable."}};
+        json python;
+        if (getFromPython("/api/health", python)) {      // Python is up: ask it about Oracle
+            data["python"] = true;
+            data["database"] = python.value("database", false);
+            data["detail"] = python.value("database_detail", "");
+        }
+        sendOk(res, data);
     });
-    svr.Post("/api/analyze", [](const httplib::Request& q, httplib::Response& r) { serveJson(q, r, handleAnalyze); });
-    svr.Post("/api/calculate", [](const httplib::Request& q, httplib::Response& r) { serveJson(q, r, handleCalculate); });
-    svr.Post("/api/pointers", [](const httplib::Request& q, httplib::Response& r) { serveJson(q, r, handlePointers); });
-    svr.Post("/api/assessment", [](const httplib::Request& q, httplib::Response& r) { serveJson(q, r, handleAssessment); });
+    svr.Post("/api/analyze", [](const httplib::Request& q, httplib::Response& r) {
+        serveJson(q, r, "Identifier", handleAnalyze); });
+    svr.Post("/api/calculate", [](const httplib::Request& q, httplib::Response& r) {
+        serveJson(q, r, "Score", handleCalculate); });
+    svr.Post("/api/pointers", [](const httplib::Request& q, httplib::Response& r) {
+        serveJson(q, r, "Pointer", handlePointers); });
+    svr.Post("/api/assessment", [](const httplib::Request& q, httplib::Response& r) {
+        serveJson(q, r, "Assessment", handleAssessment, [](json& d) {
+            // An assessment also gets its own row in security_assessments.
+            json reply;
+            if (postToPython("/api/assessment",
+                             {{"type", "Five-score assessment"},
+                              {"score", d.value("average", 0.0)},
+                              {"result", d.value("result", std::string())}}, reply))
+                d["persisted"] = reply.value("persisted", false);
+        });
+    });
+
+    // Module 5: the file arrives as multipart data, not JSON, so it has its own route.
+    svr.Post("/api/file-hash", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            json data = handleFileHash(req);
+            const bool recorded = recordResult("File integrity", data);
+            data["persisted"] = recorded || data.value("persisted", false);
+            sendOk(res, data);
+        } catch (const std::invalid_argument& e) {
+            sendError(res, 400, e.what());
+        } catch (const std::exception&) {
+            sendError(res, 500, "Internal server error.");
+        }
+    });
 
     // Python service (Phase 6)
     svr.Post("/api/password-strength", [](const httplib::Request& q, httplib::Response& r) {
@@ -277,10 +437,10 @@ int runServer(const std::string& frontendDir, int port) {
         forwardToPython(q, r, "/api/ip-validation", kMaxJsonBody, "IP address"); });
     svr.Post("/api/report", handleReport);
 
-    // Later phases fill these in. They answer honestly instead of pretending to work.
-    svr.Post("/api/file-hash", notReady("File hashing"));
+    // Phase 8: Oracle lives behind the Python service, so these three are relays.
     for (const char* path : {"/api/history", "/api/dashboard", "/api/reports"})
-        svr.Get(path, notReady("The database"));
+        svr.Get(path, [](const httplib::Request& req, httplib::Response& res) {
+            relayGet(req.target, res); });
 
     svr.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
         if (req.path.rfind("/api/", 0) == 0 && res.body.empty())

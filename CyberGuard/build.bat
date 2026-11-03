@@ -9,6 +9,7 @@ g++ -std=c++17 -O2 -Wall -Wextra -Ibackend -Ibackend\vendor ^
   backend\main.cpp backend\server.cpp ^
   backend\modules\identifier_analyzer.cpp backend\modules\score_calculator.cpp ^
   backend\modules\pointer_operations.cpp backend\modules\user_assessment.cpp ^
+  backend\modules\file_integrity.cpp ^
   -o backend\cyberguard.exe -lws2_32 -lpthread
 if errorlevel 1 ( echo. & echo BUILD FAILED. Read the first error above. & exit /b 1 )
 echo BUILD OK: backend\cyberguard.exe

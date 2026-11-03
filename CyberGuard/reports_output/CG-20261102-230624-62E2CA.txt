@@ -1,0 +1,43 @@
+============================================================
+CYBERGUARD SECURITY REPORT
+============================================================
+Report ID   : CG-20261102-230624-62E2CA
+Analysis    : Password
+Generated   : 2026-11-02 23:06:24
+
+INPUT SUMMARY
+  length: 17
+
+RESULTS
+  character_types_present: 3
+  factors.1.detail: 17 characters
+  factors.1.factor: Length
+  factors.1.points: 51
+  factors.2.detail: present
+  factors.2.factor: Lowercase letters
+  factors.2.points: 10
+  factors.3.detail: present
+  factors.3.factor: Uppercase letters
+  factors.3.points: 10
+  factors.4.detail: missing
+  factors.4.factor: Digits
+  factors.4.points: 0
+  factors.5.detail: present
+  factors.5.factor: Special characters
+  factors.5.points: 10
+  length: 17
+  note: A heuristic for learning. It cannot tell whether a password appeared in a data breach.
+  persisted: False
+  rating: Strong
+  score: 81
+  suggestions: Add digits.
+
+OBSERVATIONS
+  1. The heuristic rating is Strong (score 81 out of 100).
+
+RECOMMENDATIONS
+  1. Add digits.
+
+CONCLUSION
+  The Password analysis finished. This report comes from CyberGuard, an educational tool, and is not a professional security assessment.
+============================================================

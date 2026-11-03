@@ -1,5 +1,5 @@
 # Phase 5 needs NO extra packages (standard library only).
-# These are used later, in Phase 6 and Phase 8:
+# Phase 6 (the Flask service) and Phase 8 (the Oracle connection in db.py) need:
 flask
 python-oracledb
 python-dotenv

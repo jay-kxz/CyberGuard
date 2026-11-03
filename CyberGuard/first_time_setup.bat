@@ -17,6 +17,6 @@ pause
 exit /b 0
 :fail
 echo.
-echo Something failed. Read the message above and send it to Claude.
+echo Something failed. Read the message above, then check README.md.
 pause
 exit /b 1
